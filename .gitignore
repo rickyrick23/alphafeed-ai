@@ -1,0 +1,29 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Environment & Keys
+.env
+.env.*
+
+# Data & Artifacts
+data/raw/
+data/processed/
+data/vectorstore/
+data/cache/
+logs/
+*.json
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
