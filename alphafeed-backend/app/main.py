@@ -7,15 +7,9 @@ from pydantic import BaseModel
 
 from app.rag.retriever import init_retriever, search
 from app.services.mistral_llm import ask_mistral
-from app.services.response_schema import build_ai_prompt
 from app.services.intent_detector import detect_intent
 
-# ---------------- APP INIT ----------------
-
-app = FastAPI(
-    title="AlphaFeed AI Backend",
-    version="0.1.0"
-)
+app = FastAPI(title="AlphaFeed AI")
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,23 +19,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------- MODELS ----------------
 
 class QueryRequest(BaseModel):
     query: str
 
-# ---------------- STARTUP ----------------
 
 @app.on_event("startup")
-def startup_event():
+def startup():
     init_retriever()
     print("✅ RAG retriever initialized")
 
-# ---------------- ROUTES ----------------
-
-@app.get("/")
-def root():
-    return {"status": "AlphaFeed AI Backend running"}
 
 @app.post("/rag/query")
 async def rag_query(req: QueryRequest):
@@ -51,24 +38,20 @@ async def rag_query(req: QueryRequest):
     # 1️⃣ Detect intent
     intent = detect_intent(query)
 
-    # 2️⃣ Vector search (NO k argument)
+    # 2️⃣ Vector search
     matches = search(query)
 
-    # 3️⃣ Extract chunks
-    context_chunks = [m["chunk"] for m in matches]
+    # 3️⃣ Build context
+    context = "\n".join([m["chunk"] for m in matches])
 
-    # 4️⃣ Build prompt
-    prompt = build_ai_prompt(query, context_chunks)
-
-    # 5️⃣ Call Mistral
+    # 4️⃣ Ask Mistral (NOW PASS CONTEXT)
     try:
-        ai_response = await ask_mistral(prompt)
-    except Exception as e:
-        print("❌ Mistral Error:", e)
-        ai_response = "AI service unavailable."
+        answer = await ask_mistral(query, context)
+    except Exception:
+        answer = "AI service unavailable."
 
     return {
         "intent": intent,
         "matches": matches,
-        "answer": ai_response
+        "answer": answer
     }
