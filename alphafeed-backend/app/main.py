@@ -6,50 +6,69 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.rag.retriever import init_retriever, search
-from app.services.groq_llm import ask_groq
+from app.services.mistral_llm import ask_mistral
+from app.services.response_schema import build_ai_prompt
+from app.services.intent_detector import detect_intent
 
-app = FastAPI()
+# ---------------- APP INIT ----------------
+
+app = FastAPI(
+    title="AlphaFeed AI Backend",
+    version="0.1.0"
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-class QueryIn(BaseModel):
+# ---------------- MODELS ----------------
+
+class QueryRequest(BaseModel):
     query: str
 
+# ---------------- STARTUP ----------------
 
 @app.on_event("startup")
-def startup():
+def startup_event():
     init_retriever()
+    print("✅ RAG retriever initialized")
 
+# ---------------- ROUTES ----------------
+
+@app.get("/")
+def root():
+    return {"status": "AlphaFeed AI Backend running"}
 
 @app.post("/rag/query")
-async def rag_query(req: QueryIn):
-    matches = search(req.query)
+async def rag_query(req: QueryRequest):
 
-    context = "\n\n".join([m["chunk"] for m in matches])
+    query = req.query.strip().lower()
 
-    prompt = f"""
-You are a financial AI assistant.
+    # 1️⃣ Detect intent
+    intent = detect_intent(query)
 
-Use ONLY the context below to answer the question.
-If the context is insufficient, say you are unsure.
+    # 2️⃣ Vector search (NO k argument)
+    matches = search(query)
 
-Context:
-{context}
+    # 3️⃣ Extract chunks
+    context_chunks = [m["chunk"] for m in matches]
 
-Question:
-{req.query}
+    # 4️⃣ Build prompt
+    prompt = build_ai_prompt(query, context_chunks)
 
-Answer clearly and concisely.
-"""
-
-    answer = await ask_groq(prompt)
+    # 5️⃣ Call Mistral
+    try:
+        ai_response = await ask_mistral(prompt)
+    except Exception as e:
+        print("❌ Mistral Error:", e)
+        ai_response = "AI service unavailable."
 
     return {
+        "intent": intent,
         "matches": matches,
-        "answer": answer
+        "answer": ai_response
     }

@@ -1,36 +1,45 @@
 import os
 from mistralai import Mistral
-from dotenv import load_dotenv
 
-load_dotenv()
+API_KEY = os.getenv("MISTRAL_API_KEY")
 
-MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
-if not MISTRAL_API_KEY:
-    raise RuntimeError("MISTRAL_API_KEY is missing in .env")
+if not API_KEY:
+    raise RuntimeError("MISTRAL_API_KEY not found in environment variables")
 
-client = Mistral(api_key=MISTRAL_API_KEY)
+client = Mistral(api_key=API_KEY)
 
 
-async def ask_mistral(prompt: str, system_prompt: str | None = None) -> str:
+async def ask_mistral(query: str, context: str) -> str:
     """
-    Calls Mistral instruct model and returns the response text.
+    Sends user query + retrieved context to Mistral
     """
-    messages = []
 
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
+    prompt = f"""
+You are a financial news analyst AI.
 
-    messages.append({"role": "user", "content": prompt})
+Answer ONLY using the context below.
+
+Context:
+{context}
+
+Question:
+{query}
+
+Give a clear, short and factual answer.
+"""
 
     try:
         response = client.chat.complete(
-            model="mistral-small-latest",   # lightweight + fast
-            messages=messages,
-            temperature=0.35
+            model="mistral-medium",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2,
+            max_tokens=400
         )
 
-        return response.choices[0].message["content"]
+        return response.choices[0].message.content
 
     except Exception as e:
         print("Mistral API Error:", e)
-        return "Sorry — the AI response is temporarily unavailable."
+        return "Sorry, AI service is currently unavailable."

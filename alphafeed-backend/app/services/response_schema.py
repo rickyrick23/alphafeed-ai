@@ -1,7 +1,14 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
+from pydantic import BaseModel
 
 
+# ---------------- API REQUEST ----------------
+class QueryRequest(BaseModel):
+    query: str
+
+
+# ---------------- AI RESPONSE STRUCTURE ----------------
 @dataclass
 class EvidenceItem:
     source: str
@@ -18,6 +25,7 @@ class AIResponse:
     confidence: int  # 0–100
 
 
+# ---------------- PROMPT BUILDER ----------------
 def build_ai_prompt(query: str, context_chunks: List[str]) -> str:
     """
     Prompt template for Mistral — ensures structured, analyst-style thinking.
