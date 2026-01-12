@@ -1,37 +1,39 @@
+# app/services/mistral_llm.py
+
+from mistralai.client import MistralClient
+import time
 import os
-from mistralai import Mistral
 
 API_KEY = os.getenv("MISTRAL_API_KEY")
 
-client = Mistral(api_key=API_KEY)
+client = MistralClient(api_key=API_KEY)
+
+MODEL = "mistral-small"
 
 
-def ask_mistral(query: str, context: str, live_data: str = ""):
-    system_prompt = f"""
-You are AlphaFeed, a professional financial intelligence analyst.
-
-Context from verified sources:
-{context}
-
-Live market data:
-{live_data}
-
-Rules:
-- Be factual
-- Do not hallucinate
-- If unsure, say "insufficient data"
-- Keep tone professional
-"""
+def ask_mistral(prompt: str, context: str = "", live_data: dict = None):
 
     messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": query}
+        {"role": "system", "content": "You are a financial intelligence assistant."},
+        {"role": "user", "content": prompt}
     ]
 
-    response = client.chat.complete(
-        model="mistral-medium",
-        messages=messages,
-        temperature=0.2
-    )
+    for attempt in range(3):
+        try:
+            response = client.chat.complete(
+                model=MODEL,
+                messages=messages,
+                temperature=0.3
+            )
 
-    return response.choices[0].message.content
+            return response.choices[0].message.content
+
+        except Exception as e:
+            print(f"⚠ Mistral attempt {attempt+1} failed:", e)
+
+            if "429" in str(e):
+                time.sleep(5)
+            else:
+                break
+
+    return "⚠ LLM unavailable right now due to rate limits. Please try again shortly."
