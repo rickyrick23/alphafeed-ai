@@ -1,29 +1,57 @@
+# app/ingestion/market_fetcher.py
+
 import yfinance as yf
 from datetime import datetime
 
-def get_stock_snapshot(ticker: str):
-    t = yf.Ticker(ticker)
 
-    info = t.info or {}
-
-    price = info.get("currentPrice") or info.get("regularMarketPrice")
-    prev = info.get("previousClose")
-    change = None
-
-    if price and prev:
-        change = round(((price - prev) / prev) * 100, 2)
-
-    return {
-        "ticker": ticker.upper(),
-        "price": price,
-        "change_percent": change,
-        "currency": info.get("currency"),
-        "market_cap": info.get("marketCap"),
-        "sector": info.get("sector"),
-        "industry": info.get("industry"),
-        "timestamp": datetime.utcnow().isoformat()
-    }
+TICKER_MAP = {
+    "usd to inr": "USDINR=X",
+    "dollar to rupee": "USDINR=X",
+    "gold": "GC=F",
+    "silver": "SI=F",
+    "bitcoin": "BTC-USD",
+    "btc": "BTC-USD",
+    "ethereum": "ETH-USD",
+    "eth": "ETH-USD",
+    "nvidia": "NVDA",
+    "apple": "AAPL",
+    "tesla": "TSLA",
+    "sensex": "^BSESN",
+    "nifty": "^NSEI"
+}
 
 
-if __name__ == "__main__":
-    print(get_stock_snapshot("NVDA"))
+def extract_ticker(query: str):
+    q = query.lower()
+    for key, ticker in TICKER_MAP.items():
+        if key in q:
+            return ticker
+    return None
+
+
+def fetch_market_data(query: str):
+    """
+    Auto-detect ticker from query and fetch live data
+    """
+
+    ticker = extract_ticker(query)
+
+    if not ticker:
+        return {"error": "No valid ticker found in query"}
+
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+
+        return {
+            "query": query,
+            "ticker": ticker,
+            "price": info.get("currentPrice"),
+            "change_percent": info.get("regularMarketChangePercent"),
+            "currency": info.get("currency"),
+            "market_cap": info.get("marketCap"),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+    except Exception as e:
+        return {"error": str(e)}

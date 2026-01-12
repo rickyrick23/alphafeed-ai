@@ -2,22 +2,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.rag.retriever import init_retriever, search
 from app.services.mistral_llm import ask_mistral
 from app.services.intent_detector import detect_intent
+from app.ingestion.market_fetcher import fetch_market_data
 
-app = FastAPI(title="AlphaFeed AI")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="AlphaFeed AI", version="0.1.0")
 
 
 class QueryRequest(BaseModel):
@@ -27,28 +19,37 @@ class QueryRequest(BaseModel):
 @app.on_event("startup")
 def startup():
     init_retriever()
-    print("✅ RAG retriever initialized")
+
+
+@app.get("/")
+def root():
+    return {"status": "AlphaFeed backend running"}
 
 
 @app.post("/rag/query")
-async def rag_query(req: QueryRequest):
+def rag_query(req: QueryRequest):
 
-    query = req.query.strip().lower()
+    query = req.query
 
-    # 1️⃣ Detect intent
+    # 1. Detect intent
     intent = detect_intent(query)
 
-    # 2️⃣ Vector search
-    matches = search(query)
+    # 2. Retrieve documents
+    matches = search(query, top_k=5)
 
-    # 3️⃣ Build context
-    context = "\n".join([m["chunk"] for m in matches])
+    # 3. Build context
+    context_chunks = [m["chunk"] for m in matches]
+    context_text = "\n".join(context_chunks)
 
-    # 4️⃣ Ask Mistral (NOW PASS CONTEXT)
-    try:
-        answer = await ask_mistral(query, context)
-    except Exception:
-        answer = "AI service unavailable."
+    # 4. Fetch live data
+    live_data = fetch_market_data(query)
+
+    # 5. Ask Mistral correctly
+    answer = ask_mistral(
+        query=query,
+        context=context_text,
+        live_data=str(live_data)
+    )
 
     return {
         "intent": intent,

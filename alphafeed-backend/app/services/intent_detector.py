@@ -1,77 +1,85 @@
-# ---------------- STOCK ----------------
-STOCK_KEYWORDS = [
-    "stock", "stocks", "share", "shares", "equity", "equities",
-    "ipo", "earnings", "results", "quarter", "revenue", "profit",
-    "loss", "dividend", "buyback", "valuation", "market cap",
-    "nasdaq", "nyse", "sensex", "nifty", "dow", "s&p",
-    "price target", "analyst rating", "upgrade", "downgrade",
-    "bullish", "bearish", "portfolio",
-    "tesla", "apple", "microsoft", "google", "meta",
-    "amazon", "nvidia", "amd", "intel", "tcs", "infosys",
-    "reliance", "hdfc", "icici", "axis"
-]
+# app/services/intent_detector.py
 
-# ---------------- CRYPTO ----------------
+# ---------------- KEYWORD LISTS ---------------- #
+
 CRYPTO_KEYWORDS = [
-    "crypto", "cryptocurrency", "blockchain", "token",
-    "bitcoin", "btc", "ethereum", "eth", "solana", "sol",
-    "dogecoin", "doge", "shiba", "shib", "cardano", "ada",
-    "ripple", "xrp", "binance", "bnb", "avalanche", "avax",
-    "polygon", "matic", "chainlink", "link",
-    "nft", "defi", "staking", "airdrops", "mining",
-    "wallet", "exchange", "coinbase", "kraken", "binance",
-    "market cap", "hashrate", "gas fee"
+    "bitcoin", "btc", "ethereum", "eth", "crypto", "blockchain",
+    "dogecoin", "doge", "xrp", "ripple", "solana", "ada", "cardano",
+    "binance", "bnb", "usdt", "tether", "stablecoin", "metamask",
+    "nft", "web3", "defi", "staking", "hashrate", "mining",
+    "altcoin", "crypto crash", "crypto rally", "bull run",
+    "bear market", "coinbase", "kraken", "ledger", "wallet",
+    "gas fee", "layer 2", "polygon", "arbitrum", "optimism",
+    "airdrops", "whale", "rug pull", "yield farming"
 ]
 
-# ---------------- FOREX ----------------
 FOREX_KEYWORDS = [
-    "forex", "fx", "currency", "exchange rate",
-    "usd", "inr", "eur", "gbp", "jpy", "cny", "aud", "cad",
-    "usd to inr", "eur to usd", "gbp to inr",
-    "dollar", "rupee", "euro", "pound", "yen", "yuan",
-    "appreciation", "depreciation",
-    "currency pair", "usdinr", "eurusd", "gbpusd",
-    "central bank", "rate hike", "rate cut"
+    "usd", "inr", "eur", "gbp", "jpy", "cad", "aud", "chf",
+    "exchange rate", "forex", "fx", "currency",
+    "usd to inr", "eur to usd", "gbp to inr", "yen",
+    "dollar", "rupee", "pound", "euro",
+    "fx market", "currency pair", "pip", "spread",
+    "central bank", "interest rate",
+    "federal reserve", "ecb", "boe", "rbi",
+    "currency swap", "devaluation", "appreciation",
+    "import export", "trade balance", "forex reserves"
 ]
 
-# ---------------- COMMODITY ----------------
 COMMODITY_KEYWORDS = [
-    "commodity", "commodities",
-
-    # Metals
-    "gold", "silver", "copper", "aluminium", "aluminum",
-    "zinc", "nickel", "lead", "platinum", "palladium",
-
-    # Energy
-    "oil", "crude", "brent", "wti",
-    "natural gas", "lng", "petrol", "diesel",
-
-    # Agriculture
-    "wheat", "rice", "corn", "maize", "soybean",
-    "cotton", "sugar", "coffee", "tea",
-    "rubber", "palm oil", "sunflower oil",
-
-    # Commodity terms
-    "futures", "spot price", "inventory",
-    "supply", "demand", "opec"
+    "gold", "silver", "crude oil", "oil price", "brent",
+    "wti", "natural gas", "lng", "coal",
+    "copper", "aluminium", "zinc", "nickel", "lead",
+    "platinum", "palladium", "uranium",
+    "corn", "wheat", "soybean", "coffee", "sugar",
+    "cotton", "rubber", "palm oil", "sunflower oil",
+    "iron ore", "steel", "lithium", "cobalt",
+    "fertilizer", "urea", "phosphate",
+    "mcx", "ncdex", "commodities",
+    "spot price", "futures", "contracts",
+    "opec", "oil supply", "oil demand",
+    "gold rate", "silver rate", "bullion",
+    "base metals", "agri commodities",
+    "precious metals", "energy market",
+    "shipping rates", "freight index",
+    "lme", "comex"
 ]
 
-# ---------------- MACRO ----------------
 MACRO_KEYWORDS = [
-    "inflation", "cpi", "ppi",
-    "gdp", "growth", "recession",
-    "interest rate", "repo rate", "reverse repo",
-    "fed", "fomc", "rbi", "ecb", "boe",
-    "central bank", "monetary policy",
-    "rate hike", "rate cut",
+    "inflation", "cpi", "ppi", "gdp", "growth rate",
+    "recession", "economic slowdown", "stimulus",
+    "interest rate hike", "rate cut",
     "bond yield", "treasury",
     "unemployment", "job data",
     "trade deficit", "current account",
-    "budget", "fiscal policy"
+    "fiscal deficit", "budget",
+    "monetary policy", "liquidity",
+    "quantitative easing",
+    "consumer spending",
+    "manufacturing data",
+    "pmI", "services pmi",
+    "exports", "imports",
+    "world bank", "imf",
+    "global economy"
 ]
 
+STOCK_KEYWORDS = [
+    "stock", "shares", "equity", "ipo",
+    "nvidia", "tesla", "apple", "google",
+    "amazon", "meta", "microsoft",
+    "earnings", "quarter results",
+    "dividend", "buyback",
+    "nasdaq", "sensex", "nifty",
+    "dow jones", "s&p 500",
+    "market crash", "market rally",
+    "valuation", "pe ratio",
+    "brokerage", "analyst rating",
+    "target price", "upgrade", "downgrade",
+    "insider trading", "sec filing",
+    "mutual funds", "hedge fund"
+]
 
-# ---------------- FUNCTION ----------------
+# ---------------- MAIN FUNCTION ---------------- #
+
 def detect_intent(query: str) -> str:
     q = query.lower()
 
