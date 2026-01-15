@@ -1,58 +1,54 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from app.rag.generator import Generator
+from app.ingestion.universal_ingestor import UniversalIngestor
+import uvicorn
 
-from app.rag.retriever import init_retriever, search
-from app.services.mistral_llm import ask_mistral
-from app.services.intent_detector import detect_intent
-from app.ingestion.market_fetcher import fetch_market_data
-
-app = FastAPI(title="AlphaFeed AI", version="0.1.0")
-
-
+# 1. Define the Input Format
 class QueryRequest(BaseModel):
     query: str
+    deep_analysis: bool = False
 
+# 2. Initialize the App & AI
+app = FastAPI(title="AlphaFeed AI API", version="1.0")
 
-@app.on_event("startup")
-def startup():
-    init_retriever()
-
+print("🧠 Loading AI Model... Please wait.")
+ai_generator = Generator() 
+ingestor = UniversalIngestor()
 
 @app.get("/")
-def root():
-    return {"status": "AlphaFeed backend running"}
+def home():
+    return {"status": "Online", "message": "AlphaFeed Financial Brain is Ready."}
 
+@app.post("/chat")
+def chat_endpoint(request: QueryRequest):
+    """
+    Main Chat Endpoint:
+    Receives a question -> Searches Memory -> Generates Answer
+    """
+    try:
+        response = ai_generator.generate_answer(request.query)
+        return {
+            "answer": response["answer"],
+            "sources": response["sources"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/rag/query")
-def rag_query(req: QueryRequest):
+@app.post("/refresh-data")
+def refresh_data():
+    """
+    Trigger this to fetch new news/prices immediately.
+    """
+    try:
+        ingestor.ingest_all()
+        return {"status": "success", "message": "Knowledge Base Updated with latest data."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    query = req.query
-
-    # 1. Detect intent
-    intent = detect_intent(query)
-
-    # 2. Retrieve documents
-    matches = search(query, top_k=5)
-
-    # 3. Build context
-    context_chunks = [m["chunk"] for m in matches]
-    context_text = "\n".join(context_chunks)
-
-    # 4. Fetch live data
-    live_data = fetch_market_data(query)
-
-    # 5. Ask Mistral correctly
-    answer = ask_mistral(
-        query=query,
-        context=context_text,
-        live_data=str(live_data)
-    )
-
-    return {
-        "intent": intent,
-        "matches": matches,
-        "answer": answer
-    }
+# Run server if executed directly
+if __name__ == "__main__":
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

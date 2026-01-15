@@ -1,61 +1,45 @@
-from dataclasses import dataclass
-from typing import List
-from pydantic import BaseModel
+# File: app/services/response_schema.py
 
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
-# ---------------- API REQUEST ----------------
-class QueryRequest(BaseModel):
-    query: str
+class SourceRef(BaseModel):
+    title: str
+    url: str
+    credibility_rating: str = Field(
+        description="Rating of the source's reputation (e.g., 'High' for Reuters/SEC, 'Medium' for news blogs, 'Low' for unverified)."
+    )
 
+class RiskFactor(BaseModel):
+    factor: str
+    impact: str = Field(description="Potential impact severity: High, Medium, or Low.")
+    description: str = Field(description="Brief explanation of why this is a risk.")
 
-# ---------------- AI RESPONSE STRUCTURE ----------------
-@dataclass
-class EvidenceItem:
-    source: str
-    link: str
-    snippet: str
-
-
-@dataclass
-class AIResponse:
-    summary: str
-    reasoning: str
-    risks: str
-    evidence: List[EvidenceItem]
-    confidence: int  # 0–100
-
-
-# ---------------- PROMPT BUILDER ----------------
-def build_ai_prompt(query: str, context_chunks: List[str]) -> str:
-    """
-    Prompt template for Mistral — ensures structured, analyst-style thinking.
-    """
-
-    context_text = "\n\n".join(context_chunks[:10]) if context_chunks else "No context available."
-
-    return f"""
-You are AlphaFeed — a calm, analytical market intelligence assistant.
-
-You MUST respond in the following JSON structure only:
-
-{{
-  "summary": "...",
-  "reasoning": "...",
-  "risks": "...",
-  "confidence": 0-100
-}}
-
-Rules:
-- Be objective and analytical — tone like a financial analyst.
-- Use short, dense sentences — avoid hype.
-- If information is uncertain, say so.
-- Do NOT invent facts.
-
-User Query:
-{query}
-
-Relevant Market Context:
-{context_text}
-
-Now produce the structured response.
-"""
+class FinancialResponse(BaseModel):
+    answer: str = Field(
+        description="The main, direct answer to the user's query."
+    )
+    summary: str = Field(
+        description="A concise 2-sentence summary suitable for a dashboard card."
+    )
+    sentiment: str = Field(
+        description="Overall market sentiment: Bullish, Bearish, or Neutral."
+    )
+    confidence_score: float = Field(
+        description="A score from 0.0 to 1.0 indicating how confident the AI is based on the available evidence."
+    )
+    credibility_score: float = Field(
+        description="A score from 0.0 to 1.0 representing the average reliability of the sources used."
+    )
+    reasoning: str = Field(
+        description="Chain-of-thought explanation of how the conclusion was reached (improves transparency)."
+    )
+    key_events: List[str] = Field(
+        description="List of specific market events identified (e.g., 'Fed Rate Cut', 'Earnings Miss')."
+    )
+    risks: List[RiskFactor] = Field(
+        description="List of potential downside risks or market uncertainties."
+    )
+    sources: List[SourceRef] = Field(
+        description="List of all sources cited in this response."
+    )
