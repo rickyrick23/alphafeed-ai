@@ -1,69 +1,80 @@
-# File: app/ingestion/market_fetcher.py
-
 import yfinance as yf
+import requests
+import os
 
 class MarketFetcher:
     def __init__(self):
-        # Map common names to Yahoo Finance Tickers
-        # This helps the "Intent Detector" find the right asset.
-        self.ticker_map = {
-            "bitcoin": "BTC-USD",
-            "btc": "BTC-USD",
-            "ethereum": "ETH-USD",
-            "nvidia": "NVDA",
-            "apple": "AAPL",
-            "tesla": "TSLA",
-            "gold": "GC=F",
-            "oil": "CL=F",
-            "euro": "EURUSD=X",
-            "sp500": "^GSPC",
-            "nasdaq": "^IXIC"
-        }
+        self.api_key = os.getenv("MARKETAUX_API_KEY")
 
-    def get_ticker_from_query(self, query: str):
-        """
-        Simple keyword extraction to find which asset the user is asking about.
-        """
-        query_lower = query.lower()
-        for key, ticker in self.ticker_map.items():
-            if key in query_lower:
-                return ticker
-        return None
+    def fetch_marketaux_news(self):
+        if not self.api_key:
+            print("❌ Error: MARKETAUX_API_KEY not found in env")
+            return []
 
-    def get_data_for_query(self, query: str):
-        """
-        Fetches live price, change, and volume for the requested asset.
-        """
-        ticker_symbol = self.get_ticker_from_query(query)
-        
-        if not ticker_symbol:
-            return None  # No specific asset found in query
+        url = f"https://api.marketaux.com/v1/news/all?symbols=TSLA,AMZN,MSFT,NVDA,AAPL,GOOGL&filter_entities=true&limit=5&api_token={self.api_key}"
 
         try:
-            print(f"📈 Fetching Live Data for: {ticker_symbol}")
-            ticker = yf.Ticker(ticker_symbol)
+            response = requests.get(url)
+            data = response.json()
             
-            # fast_info is faster than .info
-            info = ticker.fast_info
-            
-            # Calculate % change manually if needed, or get from history
-            current_price = info.last_price
-            prev_close = info.previous_close
-            change_percent = ((current_price - prev_close) / prev_close) * 100
-
-            return {
-                "asset": ticker_symbol,
-                "current_price": round(current_price, 2),
-                "change_percent": f"{change_percent:+.2f}%",
-                "market_cap": info.market_cap,
-                "status": "Live Data Fetched Successfully"
-            }
-            
+            clean_news = []
+            if "data" in data:
+                for item in data["data"]:
+                    clean_news.append({
+                        "id": item["uuid"],
+                        "title": item["title"],
+                        "source": item["source"],
+                        "url": item["url"],
+                        "published_at": item["published_at"],
+                        "sentiment_score": item["entities"][0]["sentiment_score"] if item.get("entities") else 0
+                    })
+            return clean_news
         except Exception as e:
-            print(f"Market Data Error: {e}")
-            return {"error": "Failed to fetch live data"}
+            print(f"Error fetching news: {str(e)}")
+            return []
 
-# Test block
-if __name__ == "__main__":
-    mf = MarketFetcher()
-    print(mf.get_data_for_query("How is Bitcoin performing today?"))
+    def fetch_macro_data(self):
+        tickers = {
+            "NIFTY 50": "^NSEI", "SENSEX": "^BSESN", "S&P 500": "^GSPC",
+            "GOLD": "GC=F", "CRUDE OIL": "CL=F", "USD/INR": "INR=X"
+        }
+        macro_data = []
+        for name, ticker in tickers.items():
+            try:
+                stock = yf.Ticker(ticker)
+                hist = stock.history(period="1d")
+                if not hist.empty:
+                    price = hist['Close'].iloc[-1]
+                    prev = stock.info.get('previousClose', hist['Open'].iloc[0])
+                    change = ((price - prev) / prev) * 100
+                    macro_data.append({
+                        "name": name,
+                        "price": round(price, 2),
+                        "change": round(change, 2),
+                        "trend": "Bullish" if change > 0 else "Bearish"
+                    })
+            except Exception:
+                pass
+        return macro_data
+
+    def fetch_single_stock(self, ticker: str):
+        try:
+            stock = yf.Ticker(ticker)
+            data = stock.history(period="1d")
+            if data.empty: return {"error": "No data"}
+            
+            current = data['Close'].iloc[-1]
+            prev = stock.info.get('previousClose', data['Open'].iloc[0]) 
+            change = ((current - prev) / prev) * 100
+            
+            return {
+                "ticker": ticker.upper(),
+                "price": round(current, 2),
+                "change_percent": round(change, 2),
+                "volume": int(data['Volume'].iloc[-1])
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+# Initialize a global instance to be used by routers
+market_fetcher = MarketFetcher()

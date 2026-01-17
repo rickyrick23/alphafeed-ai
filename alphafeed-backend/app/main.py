@@ -1,54 +1,46 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from app.rag.generator import Generator
-from app.ingestion.universal_ingestor import UniversalIngestor
-import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-# 1. Define the Input Format
-class QueryRequest(BaseModel):
-    query: str
-    deep_analysis: bool = False
+# IMPORT ALL ROUTERS (The "Kitchen Stations")
+from app.routers import market, verifier, alerts, portfolio, screener, reports
 
-# 2. Initialize the App & AI
-app = FastAPI(title="AlphaFeed AI API", version="1.0")
+app = FastAPI()
 
-print("🧠 Loading AI Model... Please wait.")
-ai_generator = Generator() 
-ingestor = UniversalIngestor()
+# ---------------------------------------------------------
+# CONFIGURATION
+# ---------------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all frontend origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---------------------------------------------------------
+# INCLUDE ROUTERS
+# ---------------------------------------------------------
+# 1. Market Data (Stocks, News, Macro) -> routers/market.py
+app.include_router(market.router, prefix="/api", tags=["Market"])
+
+# 2. Source Verifier (NLP Logic) -> routers/verifier.py
+app.include_router(verifier.router, prefix="/api", tags=["Verifier"])
+
+# 3. Alerts System (Watchlist) -> routers/alerts.py
+app.include_router(alerts.router, prefix="/api", tags=["Alerts"])
+
+# 4. Portfolio Engine (Holdings & P/L) -> routers/portfolio.py
+app.include_router(portfolio.router, prefix="/api", tags=["Portfolio"])
+
+# 5. Deep Screener (Filter Logic) -> routers/screener.py
+app.include_router(screener.router, prefix="/api", tags=["Screener"])
+
+# 6. Saved Reports (PDF Generation) -> routers/reports.py
+app.include_router(reports.router, prefix="/api", tags=["Reports"])
 
 @app.get("/")
-def home():
-    return {"status": "Online", "message": "AlphaFeed Financial Brain is Ready."}
-
-@app.post("/chat")
-def chat_endpoint(request: QueryRequest):
-    """
-    Main Chat Endpoint:
-    Receives a question -> Searches Memory -> Generates Answer
-    """
-    try:
-        response = ai_generator.generate_answer(request.query)
-        return {
-            "answer": response["answer"],
-            "sources": response["sources"]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/refresh-data")
-def refresh_data():
-    """
-    Trigger this to fetch new news/prices immediately.
-    """
-    try:
-        ingestor.ingest_all()
-        return {"status": "success", "message": "Knowledge Base Updated with latest data."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Run server if executed directly
-if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+def root():
+    return {"message": "AlphaFeed AI Terminal API is Running"}

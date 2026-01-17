@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 13, 16, 22;
+  --background-end-rgb: 13, 16, 22;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+  font-family: 'Inter', sans-serif; /* Optional: If you are using Inter font */
+  overflow: hidden; /* Keeps the app feeling like a native terminal */
+}
+
+/* Custom Scrollbar for the entire app */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0d1016;
+}
+::-webkit-scrollbar-thumb {
+  background: #1c2128;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2a303c;
+}
+
+/* --------------------------------------------------
+   NEW ANIMATION STYLES (Fixes the Hydration Error) 
+   --------------------------------------------------
+*/
+
+/* 1. Define the scrolling motion */
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* 2. Class to apply the animation */
+.animate-ticker {
+  animation: ticker 60s linear infinite; /* Slower speed (60s) for better readability */
+  width: max-content; /* Ensures it flows correctly */
+  will-change: transform; /* Performance optimization */
+}
+
+/* 3. Class to pause when user hovers */
+.pause-on-hover:hover {
+  animation-play-state: paused;
+}
+
+/* 4. A nice fade mask for the edges of the ticker */
+.mask-linear-fade {
+  mask-image: linear-gradient(
+    to right, 
+    transparent 0%, 
+    black 20px, 
+    black calc(100% - 20px), 
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right, 
+    transparent 0%, 
+    black 20px, 
+    black calc(100% - 20px), 
+    transparent 100%
+  );
+}
