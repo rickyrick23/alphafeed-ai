@@ -1,54 +1,71 @@
-import json
-from pathlib import Path
-from transformers import pipeline
-from datetime import datetime
+import yfinance as yf
+import numpy as np
 
-PROCESSED_NEWS_DIR = Path("data/processed/news")
-SENTIMENT_DIR = Path("data/processed/sentiment")
-SENTIMENT_DIR.mkdir(parents=True, exist_ok=True)
+def analyze_market_sentiment(ticker: str):
+    """
+    REAL-TIME TECHNICAL SENTIMENT ENGINE
+    Fetches live candles and calculates Trend Direction.
+    """
+    try:
+        # 1. Fetch 3 months of data to calculate Moving Averages
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="3mo")
+        
+        if hist.empty:
+            return _get_fallback_sentiment(ticker)
 
-# Load FinBERT once
-print("Loading FinBERT model...")
-sentiment_model = pipeline(
-    "sentiment-analysis",
-    model="ProsusAI/finbert"
-)
-print("FinBERT loaded successfully")
+        # 2. Calculate Indicators (Simple Moving Average)
+        current_price = hist['Close'].iloc[-1]
+        sma_50 = hist['Close'].rolling(window=50).mean().iloc[-1]
+        
+        # If not enough data for SMA 50, use SMA 20
+        if np.isnan(sma_50):
+            sma_50 = hist['Close'].rolling(window=20).mean().iloc[-1]
 
+        # 3. Determine Sentiment Logic
+        # Price > SMA = Bullish Trend
+        sentiment_score = 50 # Start Neutral
+        
+        if current_price > sma_50:
+            gap = ((current_price - sma_50) / sma_50) * 100
+            # Cap the score between 50 and 95
+            sentiment_score = 50 + min(45, gap * 5) 
+            label = "BULLISH"
+            summary = f"{ticker} is trading ABOVE its 50-day moving average, indicating strong upward momentum."
+        else:
+            gap = ((sma_50 - current_price) / sma_50) * 100
+            sentiment_score = 50 - min(45, gap * 5)
+            label = "BEARISH"
+            summary = f"{ticker} is trading BELOW its 50-day moving average, suggesting selling pressure."
 
-def get_sentiment(text: str) -> str:
-    if not text.strip():
-        return "neutral"
+        # 4. Projected Range (Based on Daily Volatility/ATR)
+        daily_volatility = hist['Close'].pct_change().std()
+        # Project 24h range (1 standard deviation)
+        low_proj = current_price * (1 - daily_volatility)
+        high_proj = current_price * (1 + daily_volatility)
 
-    # FinBERT performs best with limited text length
-    text = text[:512]
+        return {
+            "ticker": ticker.upper(),
+            "sentiment_score": round(sentiment_score),
+            "sentiment_label": label,
+            "current_price": round(current_price, 2),
+            "projected_low": round(low_proj, 2),
+            "projected_high": round(high_proj, 2),
+            "summary": summary
+        }
 
-    result = sentiment_model(text)[0]
-    return result["label"].lower()
+    except Exception as e:
+        print(f"Sentiment Error: {e}")
+        return _get_fallback_sentiment(ticker)
 
-
-def process_sentiment_file(processed_file: Path):
-    with open(processed_file, "r", encoding="utf-8") as f:
-        articles = json.load(f)
-
-    output_data = []
-
-    for a in articles:
-        combined = f"{a.get('title','')} {a.get('summary','')}"
-        sentiment = get_sentiment(combined)
-
-        a["sentiment"] = sentiment
-        output_data.append(a)
-
-    output_file = SENTIMENT_DIR / processed_file.name
-
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(output_data, f, indent=2, ensure_ascii=False)
-
-    print(f"Sentiment file saved: {output_file}")
-
-
-if __name__ == "__main__":
-    latest_file = sorted(PROCESSED_NEWS_DIR.glob("*.json"))[-1]
-    print(f"Processing sentiment for: {latest_file.name}")
-    process_sentiment_file(latest_file)
+def _get_fallback_sentiment(ticker):
+    """Graceful fallback if API fails"""
+    return {
+        "ticker": ticker,
+        "sentiment_score": 50,
+        "sentiment_label": "NEUTRAL",
+        "current_price": 0,
+        "projected_low": 0,
+        "projected_high": 0,
+        "summary": "Insufficient data to calculate technical sentiment."
+    }

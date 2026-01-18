@@ -1,187 +1,327 @@
-// src/app/alerts/page.tsx
 "use client";
-import { useState, useEffect } from 'react';
-import { fetchAlerts, createAlert, deleteAlert, fetchStockPrice } from '@/lib/api'; // Added fetchStockPrice
-import { Bell, Plus, Trash2, TrendingUp, TrendingDown, Activity, CheckCircle, AlertTriangle, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { fetchMacroView } from '@/lib/api';
+import { Bell, Plus, Trash2, Activity, AlertTriangle, ArrowRight, Loader2, X, Zap } from 'lucide-react';
+
+// Define the exact types
+type SignalStatus = 'ACTIVE' | 'TRIGGERED';
+type SignalCondition = 'ABOVE' | 'BELOW';
+
+interface Signal {
+  id: string;
+  ticker: string;
+  condition: SignalCondition;
+  targetPrice: number;
+  status: SignalStatus;
+  createdAt: string;
+  currentPrice?: number;
+}
 
 export default function AlertsPage() {
-  const [alerts, setAlerts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // --- STATE ---
+  const [signals, setSignals] = useState<Signal[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
   
-  // Form State
   const [ticker, setTicker] = useState("");
-  const [price, setPrice] = useState("");
-  const [condition, setCondition] = useState("Above");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [target, setTarget] = useState("");
+  const [condition, setCondition] = useState<SignalCondition>("ABOVE");
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{title: string, msg: string} | null>(null);
+  
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Notification State
-  const [notification, setNotification] = useState<{message: string, type: 'success' | 'alert'} | null>(null);
-
-  // 1. Load Data
+  // --- 1. LOAD SAVED SIGNALS ON STARTUP ---
   useEffect(() => {
-    loadData();
+    // Load sound safely
+    if (typeof window !== 'undefined') {
+        audioRef.current = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+    }
+
+    const saved = localStorage.getItem('alphafeed_signals');
+    if (saved) {
+      try {
+        setSignals(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse signals", e);
+      }
+    } else {
+      setSignals([
+        { id: '1', ticker: 'NVDA', condition: 'ABOVE', targetPrice: 200, status: 'ACTIVE', createdAt: '10:42 AM' },
+        { id: '2', ticker: 'BTC-USD', condition: 'BELOW', targetPrice: 85000, status: 'ACTIVE', createdAt: '09:15 AM' }
+      ]);
+    }
+    setIsLoaded(true);
+
+    if ("Notification" in window) {
+      Notification.requestPermission();
+    }
   }, []);
 
-  async function loadData() {
-    const data = await fetchAlerts();
-    setAlerts(data);
-    setLoading(false);
-  }
-
-  // 2. THE MARKET WATCHER LOOP (Runs every 10 seconds)
+  // --- 2. SAVE SIGNALS WHENEVER THEY CHANGE ---
   useEffect(() => {
-    if (alerts.length === 0) return;
+    if (isLoaded) {
+      localStorage.setItem('alphafeed_signals', JSON.stringify(signals));
+    }
+  }, [signals, isLoaded]);
 
-    const interval = setInterval(async () => {
-        console.log("🔍 Scanning market for alerts...");
+  // --- 3. NEURAL ENGINE (LIVE MONITORING) ---
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    const checkSignals = async () => {
+      try {
+        const marketData = await fetchMacroView(); 
         
-        // We iterate through all active alerts
-        const updatedAlerts = await Promise.all(alerts.map(async (alert) => {
-            // Skip if already triggered to avoid spam
-            if (alert.status === "Triggered") return alert;
+        setSignals(prevSignals => {
+          let hasNewTrigger = false;
+          let triggerDetails = { ticker: "", price: 0 };
 
-            // Fetch LIVE price
-            const stockData = await fetchStockPrice(alert.ticker);
-            if (!stockData || stockData.error) return alert;
+          // Explicitly map to Signal type
+          const updatedSignals: Signal[] = prevSignals.map((signal) => {
+            if (signal.status === 'TRIGGERED') return signal;
 
-            const currentPrice = stockData.price;
-            let isHit = false;
+            const asset = marketData.find((m: any) => 
+              m.name.toUpperCase().includes(signal.ticker.toUpperCase()) || 
+              (signal.ticker === 'BTC-USD' && m.name === 'Bitcoin') || 
+              (signal.ticker === 'NVDA' && m.name === 'NVIDIA')
+            );
 
-            // Check Condition
-            if (alert.condition === "Above" && currentPrice >= alert.price) isHit = true;
-            if (alert.condition === "Below" && currentPrice <= alert.price) isHit = true;
-
-            if (isHit) {
-                // TRIGGER ALERT!
-                triggerNotification(`🚨 ALERT TRIGGERED: ${alert.ticker} hit ${currentPrice}!`);
-                return { ...alert, status: "Triggered" }; // Update local status
+            if (asset) {
+              const current = asset.price;
+              const isTriggered = 
+                (signal.condition === 'ABOVE' && current >= signal.targetPrice) ||
+                (signal.condition === 'BELOW' && current <= signal.targetPrice);
+              
+              if (isTriggered) {
+                hasNewTrigger = true;
+                triggerDetails = { ticker: signal.ticker, price: current };
+                // Explicitly cast status to SignalStatus to satisfy TS
+                return { ...signal, currentPrice: current, status: 'TRIGGERED' as SignalStatus };
+              }
+              
+              return { ...signal, currentPrice: current };
             }
-            return alert;
-        }));
+            return signal;
+          });
 
-        // Only update state if something changed to avoid re-renders
-        if (JSON.stringify(updatedAlerts) !== JSON.stringify(alerts)) {
-            setAlerts(updatedAlerts);
-        }
+          if (hasNewTrigger) {
+            triggerAlert(triggerDetails.ticker, triggerDetails.price);
+          }
 
-    }, 10000); // Check every 10 seconds
+          return updatedSignals;
+        });
+      } catch (e) {
+        console.error("Signal Engine Error:", e);
+      }
+    };
 
+    const interval = setInterval(checkSignals, 5000); 
     return () => clearInterval(interval);
-  }, [alerts]);
+  }, [isLoaded]);
 
+  // --- ALERTS ---
+  const triggerAlert = (ticker: string, price: number) => {
+    // Audio safeguard
+    if (audioRef.current) {
+        audioRef.current.play().catch(e => console.log("Audio play blocked", e));
+    }
 
-  // Helper: Show Notification Toast
-  function triggerNotification(msg: string) {
-    setNotification({ message: msg, type: 'alert' });
-    // Hide after 5 seconds
-    setTimeout(() => setNotification(null), 5000);
-  }
+    if (Notification.permission === "granted") {
+      new Notification(`ALPHAFEED ALERT: ${ticker}`, {
+        body: `${ticker} hit target! Current: ${price.toLocaleString()}`,
+        icon: "/favicon.ico"
+      });
+    }
 
-  // Handle Create
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!ticker || !price) return;
-    setIsSubmitting(true);
-    await createAlert({ ticker, condition, price: parseFloat(price) });
-    setTicker("");
-    setPrice("");
-    setIsSubmitting(false);
-    loadData();
-  }
+    setToast({ 
+      title: "SIGNAL TRIGGERED", 
+      msg: `${ticker} crossed target at $${price.toLocaleString()}` 
+    });
+    setTimeout(() => setToast(null), 5000);
+  };
 
-  // Handle Delete
-  async function handleDelete(id: number) {
-    const success = await deleteAlert(id);
-    if (success) setAlerts(alerts.filter(a => a.id !== id));
-  }
+  const handleAddSignal = () => {
+    if (!ticker || !target) return;
+    setLoading(true);
+    setTimeout(() => {
+        const newSignal: Signal = {
+            id: Math.random().toString(36).substr(2, 9),
+            ticker: ticker.toUpperCase(),
+            condition,
+            targetPrice: parseFloat(target),
+            status: 'ACTIVE',
+            createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setSignals(prev => [newSignal, ...prev]);
+        setTicker("");
+        setTarget("");
+        setLoading(false);
+    }, 500);
+  };
+
+  const handleDelete = (id: string) => {
+    setSignals(prev => prev.filter(s => s.id !== id));
+  };
+
+  if (!isLoaded) return null;
 
   return (
-    <div className="h-full flex flex-col gap-6 p-6 max-w-7xl mx-auto animate-in fade-in duration-500 relative">
-      
-      {/* --- NOTIFICATION TOAST --- */}
-      {notification && (
-        <div className="fixed top-20 right-6 bg-[#1c2128] border border-jup-lime text-white p-4 rounded-xl shadow-2xl z-50 flex items-center gap-4 animate-in slide-in-from-right">
-            <div className="w-10 h-10 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center animate-pulse">
-                <Bell size={20} />
+    <div className="flex-1 p-8 lg:p-12 overflow-y-auto custom-scrollbar bg-transparent relative">
+      <div className="max-w-6xl w-full mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        
+        {/* HEADER */}
+        <div className="flex items-center gap-4 mb-8">
+            <div className="p-3 bg-[#d2fc52]/10 rounded-xl border border-[#d2fc52]/20 shadow-[0_0_15px_rgba(210,252,82,0.1)]">
+                <Bell size={32} className="text-[#d2fc52]" />
             </div>
             <div>
-                <h4 className="font-bold text-sm text-jup-lime">SIGNAL DETECTED</h4>
-                <p className="text-xs text-gray-300">{notification.message}</p>
+                <h1 className="text-4xl font-bold text-white tracking-tight">Alerts & Signals</h1>
+                <div className="flex items-center gap-2 mt-2">
+                    <Zap size={14} className="text-[#d2fc52] animate-pulse"/>
+                    <p className="text-gray-400 text-sm font-mono uppercase tracking-wide">
+                        Neural Engine refreshes every 5s • Real-time Watchdog Active
+                    </p>
+                </div>
             </div>
-            <button onClick={() => setNotification(null)}><X size={16} className="text-gray-500 hover:text-white"/></button>
-        </div>
-      )}
-
-      {/* HEADER */}
-      <div className="flex-none">
-        <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-            <Bell className="text-jup-lime w-8 h-8" /> 
-            Alerts & Signals
-        </h1>
-        <p className="text-gray-400 text-sm mt-2">
-            System automatically scans live prices every 10s.
-        </p>
-      </div>
-
-      <div className="flex-1 flex gap-6 min-h-0">
-        
-        {/* CREATE FORM */}
-        <div className="w-1/3 bg-[#1c2128] border border-jup-border rounded-xl p-6 shadow-xl flex flex-col">
-            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                <Plus size={18} className="text-jup-lime"/> Create Signal
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase">Asset Ticker</label>
-                    <input type="text" placeholder="e.g. AAPL, BTC-USD" value={ticker} onChange={(e) => setTicker(e.target.value)} className="w-full bg-[#0d1016] border border-jup-border rounded-lg p-3 text-white focus:border-jup-lime outline-none mt-1 font-mono uppercase"/>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="text-xs font-bold text-gray-400 uppercase">Condition</label>
-                        <select value={condition} onChange={(e) => setCondition(e.target.value)} className="w-full bg-[#0d1016] border border-jup-border rounded-lg p-3 text-white focus:border-jup-lime outline-none mt-1">
-                            <option value="Above">Price Above</option>
-                            <option value="Below">Price Below</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-gray-400 uppercase">Target Price</label>
-                        <input type="number" placeholder="0.00" value={price} onChange={(e) => setPrice(e.target.value)} className="w-full bg-[#0d1016] border border-jup-border rounded-lg p-3 text-white focus:border-jup-lime outline-none mt-1 font-mono"/>
-                    </div>
-                </div>
-                <button type="submit" disabled={isSubmitting || !ticker || !price} className="w-full bg-jup-lime hover:bg-[#b8e866] text-black font-bold py-3 rounded-lg mt-4 flex items-center justify-center gap-2">
-                    {isSubmitting ? "Creating..." : "Start Watcher"}
-                    {!isSubmitting && <Activity size={18} />}
-                </button>
-            </form>
         </div>
 
-        {/* ALERTS LIST */}
-        <div className="flex-1 bg-[#1c2128] border border-jup-border rounded-xl flex flex-col overflow-hidden shadow-xl">
-            <div className="p-4 border-b border-jup-border bg-[#0d1016] flex justify-between items-center">
-                <span className="text-xs font-bold text-gray-500 uppercase">Active Monitors</span>
-                <span className="text-xs font-mono text-gray-600 bg-gray-900 px-2 py-1 rounded border border-gray-800">{alerts.length} Running</span>
-            </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin scrollbar-thumb-gray-700">
-                {loading ? <div className="text-center text-gray-500 mt-10">Syncing...</div> : alerts.map((alert) => (
-                    <div key={alert.id} className={`flex items-center justify-between p-4 border rounded-lg transition-colors group ${alert.status === "Triggered" ? "bg-red-900/10 border-red-900/30" : "bg-[#13161c] border-gray-800"}`}>
-                        <div className="flex items-center gap-4">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${alert.status === "Triggered" ? "text-red-500 border-red-500/50 bg-red-500/10 animate-pulse" : "text-green-500 border-green-500/30 bg-green-500/10"}`}>
-                                {alert.status === "Triggered" ? <AlertTriangle size={18} /> : <CheckCircle size={18} />}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            {/* LEFT: FORM */}
+            <div className="lg:col-span-4 space-y-6">
+                <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 shadow-2xl relative overflow-hidden group">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#d2fc52] to-transparent"></div>
+                    
+                    <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                        <Plus size={18} className="text-[#d2fc52]"/> Create Signal
+                    </h2>
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Asset Ticker</label>
+                            <input 
+                                value={ticker}
+                                onChange={(e) => setTicker(e.target.value)}
+                                className="w-full bg-[#0d1016] border border-[#30363d] rounded-lg p-3 text-white font-mono text-sm focus:border-[#d2fc52] outline-none transition-all uppercase placeholder:text-gray-700 focus:shadow-[0_0_10px_rgba(210,252,82,0.1)]"
+                                placeholder="E.G. AAPL, BTC-USD"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Condition</label>
+                                <select 
+                                    value={condition}
+                                    onChange={(e) => setCondition(e.target.value as SignalCondition)}
+                                    className="w-full bg-[#0d1016] border border-[#30363d] rounded-lg p-3 text-white text-sm focus:border-[#d2fc52] outline-none appearance-none cursor-pointer"
+                                >
+                                    <option value="ABOVE">Price Above</option>
+                                    <option value="BELOW">Price Below</option>
+                                </select>
                             </div>
                             <div>
-                                <h3 className="text-white font-bold text-sm flex items-center gap-2">
-                                    {alert.ticker}
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded border border-gray-600 text-gray-400">{alert.condition.toUpperCase()}</span>
-                                    <span className="font-mono text-white">{alert.price}</span>
-                                </h3>
-                                <p className="text-[10px] text-gray-500">Status: {alert.status}</p>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Target Price</label>
+                                <input 
+                                    type="number"
+                                    value={target}
+                                    onChange={(e) => setTarget(e.target.value)}
+                                    className="w-full bg-[#0d1016] border border-[#30363d] rounded-lg p-3 text-white font-mono text-sm focus:border-[#d2fc52] outline-none transition-all focus:shadow-[0_0_10px_rgba(210,252,82,0.1)]"
+                                    placeholder="0.00"
+                                />
                             </div>
                         </div>
-                        <button onClick={() => handleDelete(alert.id)} className="text-gray-600 hover:text-red-400 p-2"><Trash2 size={16} /></button>
+
+                        <button 
+                            onClick={handleAddSignal}
+                            disabled={loading || !ticker || !target}
+                            className="w-full bg-[#d2fc52] hover:bg-white text-black font-bold py-3.5 rounded-lg transition-all flex items-center justify-center gap-2 mt-4 active:scale-95 disabled:opacity-50 disabled:pointer-events-none shadow-lg hover:shadow-[0_0_20px_rgba(210,252,82,0.4)]"
+                        >
+                            {loading ? <Loader2 className="animate-spin" size={18}/> : <Activity size={18} />}
+                            {loading ? "Syncing..." : "Start Watcher"}
+                        </button>
                     </div>
-                ))}
+                </div>
+            </div>
+
+            {/* RIGHT: LIST */}
+            <div className="lg:col-span-8">
+                <div className="bg-[#161b22] border border-[#30363d] rounded-2xl overflow-hidden shadow-2xl min-h-[500px] flex flex-col">
+                    <div className="p-4 border-b border-[#30363d] bg-[#0d1016]/50 flex justify-between items-center backdrop-blur-sm">
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Active Monitors</h3>
+                        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#1c2128] border border-[#30363d]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#d2fc52] animate-pulse"></span>
+                            <span className="text-[10px] font-mono font-bold text-[#d2fc52]">SCANNING LIVE</span>
+                        </div>
+                    </div>
+
+                    <div className="divide-y divide-[#30363d] overflow-y-auto custom-scrollbar flex-1">
+                        {signals.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center text-gray-600 gap-3 min-h-[300px]">
+                                <Bell size={32} className="opacity-20" />
+                                <span className="text-xs uppercase tracking-widest">No active signals</span>
+                            </div>
+                        ) : (
+                            signals.map((signal) => (
+                                <div key={signal.id} className={`p-5 flex items-center justify-between transition-all duration-300 group ${signal.status === 'TRIGGERED' ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-[#2a303c]/30'}`}>
+                                    <div className="flex items-center gap-4">
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all duration-500 ${signal.status === 'TRIGGERED' ? 'bg-red-500/10 border-red-500/30 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)] scale-110' : 'bg-[#d2fc52]/10 border-[#d2fc52]/30 text-[#d2fc52]'}`}>
+                                            {signal.status === 'TRIGGERED' ? <AlertTriangle size={18} /> : <Activity size={18} />}
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-black text-white text-lg tracking-tight">{signal.ticker}</span>
+                                                <span className="text-[10px] text-gray-500 font-mono">{signal.createdAt}</span>
+                                            </div>
+                                            <div className="text-xs text-gray-400 flex items-center gap-1.5 mt-0.5">
+                                                <span>Target:</span>
+                                                <span className="text-white font-mono font-bold">{signal.condition === 'ABOVE' ? '>' : '<'} ${signal.targetPrice.toLocaleString()}</span>
+                                                {signal.currentPrice && (
+                                                    <>
+                                                        <ArrowRight size={10} />
+                                                        <span className={signal.status === 'TRIGGERED' ? "text-red-400 font-bold" : "text-gray-300"}>
+                                                            Curr: ${signal.currentPrice.toLocaleString()}
+                                                        </span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-4">
+                                        <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 shadow-sm transition-all duration-300 ${signal.status === 'TRIGGERED' ? "bg-red-500 text-black animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.4)]" : "bg-[#1c2128] text-gray-400 border border-[#30363d]"}`}>
+                                            <div className={`w-1.5 h-1.5 rounded-full ${signal.status === 'TRIGGERED' ? "bg-black" : "bg-[#d2fc52] animate-pulse"}`}></div>
+                                            {signal.status}
+                                        </div>
+                                        <button onClick={() => handleDelete(signal.id)} className="p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
+
+        {/* --- TOAST NOTIFICATION --- */}
+        {toast && (
+            <div className="fixed bottom-8 right-8 z-[100] animate-in slide-in-from-right-10 fade-in duration-300">
+                <div className="bg-[#161b22] border border-red-500/50 rounded-xl p-4 shadow-[0_0_30px_rgba(239,68,68,0.3)] flex items-start gap-4 max-w-sm backdrop-blur-md">
+                    <div className="bg-red-500 p-2 rounded-lg text-black shrink-0">
+                        <AlertTriangle size={24} />
+                    </div>
+                    <div>
+                        <h4 className="text-red-500 font-black uppercase text-sm tracking-widest mb-1">{toast.title}</h4>
+                        <p className="text-white text-sm font-medium">{toast.msg}</p>
+                    </div>
+                    <button onClick={() => setToast(null)} className="text-gray-500 hover:text-white">
+                        <X size={14} />
+                    </button>
+                </div>
+            </div>
+        )}
+
       </div>
     </div>
   );

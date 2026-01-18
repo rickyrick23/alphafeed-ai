@@ -7,19 +7,24 @@ module.exports = {
   ],
   theme: {
     extend: {
-      colors: {
-        jup: {
-          bg: "#13171f",       // Deep Space Background
-          card: "#1c2128",     // Glass Card Color
-          border: "#2d3748",   // Subtle Border
-          lime: "#c7f284",     // Jupiter Neon Green
-          text: "#e5e7eb",     // Soft White Text
-        }
-      },
+      // --- ANIMATION CONFIGURATION ---
       animation: {
+        marquee: 'marquee 60s linear infinite',
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-      }
+      },
+      keyframes: {
+        marquee: {
+          '0%': { transform: 'translateX(0%)' },
+          '100%': { transform: 'translateX(-100%)' },
+        },
+      },
+      // -------------------------------
+      backgroundImage: {
+        "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
+        "gradient-conic":
+          "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
+      },
     },
   },
-  plugins: [],
+  plugins: [require('@tailwindcss/typography')],
 };

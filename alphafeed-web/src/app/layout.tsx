@@ -16,18 +16,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="antialiased bg-jup-bg h-screen w-screen overflow-hidden text-jup-text flex flex-col">
+      <body className="antialiased bg-[#0d1016] h-screen w-screen overflow-hidden text-white flex flex-col">
         
-        {/* 1. NAVBAR (Fixed at Top) */}
+        {/* GLOBAL NAVBAR */}
         <Navbar />
 
-        {/* 2. FLEX CONTAINER (Sidebar + Main Content) */}
-        {/* This 'flex' class is what puts them SIDE-BY-SIDE instead of overlapping */}
+        {/* MAIN CONTAINER */}
         <div className="flex flex-1 pt-16 h-full overflow-hidden">
           
+          {/* GLOBAL SIDEBAR */}
           <Sidebar />
 
-          <main className="flex-1 overflow-y-auto overflow-x-hidden bg-jup-bg relative">
+          {/* PAGE CONTENT - Must be flex to support Dashboard's internal sidebar */}
+          <main className="flex-1 flex overflow-hidden bg-[#0d1016] relative">
             {children}
           </main>
           
