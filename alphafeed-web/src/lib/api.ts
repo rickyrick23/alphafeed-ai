@@ -8,13 +8,25 @@ const getGroqClient = () => {
     return new Groq({ apiKey, dangerouslyAllowBrowser: true });
 };
 
+// Research Feedback: Explicitly define Model and Context Parameters
+const AI_MODEL = "llama-3.3-70b-versatile"; // Selected for balance of reasoning vs latency
+const MAX_CONTEXT_CHARS = 6000; // ~1500 tokens safety limit to prevent degradation
+
+const checkContextWindow = (text: string) => {
+    if (text.length > MAX_CONTEXT_CHARS) {
+        console.warn(`Input length (${text.length}) exceeds optimization limit. Truncating to avoid degradation.`);
+        return text.substring(0, MAX_CONTEXT_CHARS);
+    }
+    return text;
+};
+
 export const fetchSystemStatus = async () => {
-  return {
-    status: "OPERATIONAL",
-    latency: "24ms",
-    database: "Encrypted",
-    ai_engine: "Llama-3.3-70B"
-  };
+    return {
+        status: "OPERATIONAL",
+        latency: "24ms",
+        database: "Encrypted",
+        ai_engine: "Llama-3.3-70B" // Matches AI_MODEL constant
+    };
 };
 
 // --- 2. INTELLIGENCE CHAT (AI) ---
@@ -56,8 +68,8 @@ export const askIntelligence = async (query: string) => {
                 { role: "system", content: systemPrompt },
                 { role: "user", content: query }
             ],
-            model: "llama-3.3-70b-versatile", 
-            temperature: 0.2, 
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.2,
             response_format: { type: "json_object" }
         });
 
@@ -98,7 +110,7 @@ function generateErrorResponse(msg: string) {
 
 export const verifySourceContent = async (text: string) => {
     const groq = getGroqClient();
-    
+
     if (!groq) {
         return {
             score: 0,
@@ -115,8 +127,11 @@ export const verifySourceContent = async (text: string) => {
       "score": Integer 0-100,
       "riskLevel": "LOW" | "MODERATE" | "CRITICAL",
       "riskMessage": "Verdict sentence.",
+      "detailedAnalysis": "Multi-paragraph markdown analysis explaining the verdict.",
+      "biasAnalysis": "Analysis of potential bias in the content.",
       "sources": [
         { "name": "Cross-Check Source", "status": "VERIFIED" | "NO MATCH", "active": boolean }
+        // ... at least 5 sources
       ]
     }
     `;
@@ -157,17 +172,17 @@ const NEWS_TEMPLATES = [
 const COMPANIES = ["Google", "Microsoft", "Aramco", "BP", "Shell"];
 
 export const fetchLiveNews = async () => {
-    await new Promise(resolve => setTimeout(resolve, 400)); 
+    await new Promise(resolve => setTimeout(resolve, 400));
 
     return Array.from({ length: 15 }).map((_, i) => {
         const template = NEWS_TEMPLATES[Math.floor(Math.random() * NEWS_TEMPLATES.length)];
         const randomCompany = COMPANIES[Math.floor(Math.random() * COMPANIES.length)];
         const randomPrice = Math.floor(Math.random() * 20000) + 40000;
-        
+
         const title = template.title
             .replace("{COMPANY}", randomCompany)
             .replace("{PRICE}", randomPrice.toString());
-        
+
         const url = `https://www.google.com/search?q=${encodeURIComponent(title)}`;
 
         return {
@@ -178,7 +193,7 @@ export const fetchLiveNews = async () => {
             sentiment: template.sentiment,
             category: template.category,
             impact: Math.floor(Math.random() * 3) + 1,
-            url: url 
+            url: url
         };
     });
 };
@@ -186,7 +201,7 @@ export const fetchLiveNews = async () => {
 // --- 5. DEEP SCREENER ---
 
 export const fetchScreenerResults = async (filters: any) => {
-    await new Promise(resolve => setTimeout(resolve, 800)); 
+    await new Promise(resolve => setTimeout(resolve, 800));
     return [
         { ticker: "NVDA", name: "NVIDIA Corp", price: "$879.95", change: "+3.24%", sector: "Technology", signal: "STRONG BUY" },
         { ticker: "RELIANCE.NS", name: "Reliance Ind", price: "₹2,980.50", change: "+1.45%", sector: "Energy", signal: "BUY" },
@@ -216,42 +231,56 @@ export const fetchEarnings = async () => {
 // --- 7. DASHBOARD WIDGETS & SENTIMENT (Corrected) ---
 
 export const fetchSentiment = async (ticker: string) => {
-    // Generate realistic price based on ticker
-    let basePrice = 150;
-    if (ticker.includes("BTC")) basePrice = 65000;
-    if (ticker.includes("NVDA")) basePrice = 880;
-    if (ticker.includes("RELIANCE")) basePrice = 2980;
-    if (ticker.includes("AAPL")) basePrice = 225;
+    try {
+        const response = await fetch(`http://localhost:8000/api/market/sentiment/${ticker}`);
+        if (!response.ok) throw new Error("Backend offline");
+        return await response.json();
+    } catch (error) {
+        console.warn("Sentiment feed offline, using backup data:", error);
+        // Backup Logic
+        let basePrice = 150;
+        if (ticker.includes("BTC")) basePrice = 65000;
+        if (ticker.includes("NVDA")) basePrice = 880;
+        if (ticker.includes("RELIANCE")) basePrice = 2980;
+        if (ticker.includes("AAPL")) basePrice = 225;
 
-    // Calculate Projected Range
-    const volatility = basePrice * 0.03; 
-    const low = (basePrice - volatility).toLocaleString(undefined, { maximumFractionDigits: 2 });
-    const high = (basePrice + volatility).toLocaleString(undefined, { maximumFractionDigits: 2 });
-    
-    // Add Currency Symbol
-    const currency = ticker.includes("NS") ? "₹" : "$";
+        // Calculate Projected Range
+        const volatility = basePrice * 0.03;
+        const low = (basePrice - volatility).toLocaleString(undefined, { maximumFractionDigits: 2 });
+        const high = (basePrice + volatility).toLocaleString(undefined, { maximumFractionDigits: 2 });
 
-    return {
-        ticker: ticker,
-        sentiment_score: Math.floor(Math.random() * 25) + 65, // 65-90%
-        sentiment_label: "BULLISH",
-        // Comprehensive Analysis Summary
-        summary: `Technical indicators suggest a breakout pattern forming on the 4H timeframe, supported by increasing buy volume. Moving averages have crossed bullishly, indicating sustained momentum. Analysts predict a test of the upper resistance levels if current support holds through the session.`,
-        // Returns formatted string with currency (e.g., "$145.50")
-        projected_low: `${currency}${low}`,
-        projected_high: `${currency}${high}`
-    };
+        // Add Currency Symbol
+        const currency = ticker.includes("NS") ? "₹" : "$";
+
+        return {
+            ticker: ticker,
+            sentiment_score: Math.floor(Math.random() * 25) + 65, // 65-90%
+            sentiment_label: "BULLISH",
+            // Comprehensive Analysis Summary
+            summary: `Technical indicators suggest a breakout pattern forming on the 4H timeframe, supported by increasing buy volume. Moving averages have crossed bullishly, indicating sustained momentum. Analysts predict a test of the upper resistance levels if current support holds through the session.`,
+            // Returns formatted string with currency (e.g., "$145.50")
+            projected_low: `${currency}${low}`,
+            projected_high: `${currency}${high}`
+        };
+    }
 };
 
 export const fetchMacroView = async () => {
-    return [
-       { name: "NIFTY 50", price: 24500, change: 0.5, sector: "INDEX" },
-       { name: "SENSEX", price: 80500, change: 0.4, sector: "INDEX" },
-       { name: "RELIANCE.NS", price: 2980, change: 1.2, sector: "INDIA" },
-       { name: "WIPRO.NS", price: 480, change: -0.5, sector: "INDIA" },
-       { name: "NVDA", price: 120, change: 2.1, sector: "LEADERS" },
-       { name: "BTC-USD", price: 65000, change: 1.5, sector: "CRYPTO" }
-    ];
+    try {
+        const response = await fetch("http://localhost:8000/api/market/macro");
+        if (!response.ok) throw new Error("Backend offline");
+        return await response.json();
+    } catch (error) {
+        console.warn("Macro feed offline, using backup data:", error);
+        return [
+            { name: "NIFTY 50", price: 24500, change: 0.5, sector: "INDEX" },
+            { name: "SENSEX", price: 80500, change: 0.4, sector: "INDEX" },
+            { name: "RELIANCE.NS", price: 2980, change: 1.2, sector: "INDIA" },
+            { name: "WIPRO.NS", price: 480, change: -0.5, sector: "INDIA" },
+            { name: "NVDA", price: 120, change: 2.1, sector: "LEADERS" },
+            { name: "BTC-USD", price: 65000, change: 1.5, sector: "CRYPTO" }
+        ];
+    }
 };
 
 // --- 8. PRO CHARTS API ---
@@ -266,47 +295,55 @@ export interface ChartDataPoint {
 }
 
 export const fetchChartData = async (ticker: string, timeframe: string = "1D") => {
-    await new Promise(resolve => setTimeout(resolve, 600)); 
+    try {
+        const response = await fetch(`http://localhost:8000/api/market/candles/${ticker}?timeframe=${timeframe}`);
+        if (!response.ok) throw new Error("Backend offline");
+        return await response.json();
+    } catch (error) {
+        console.warn("Chart feed offline, using backup data:", error);
+        // Backup Logic
+        await new Promise(resolve => setTimeout(resolve, 600));
 
-    let price = 150.00;
-    if (ticker.includes("BTC")) price = 65000;
-    if (ticker.includes("RELIANCE")) price = 2900;
-    if (ticker.includes("NVDA")) price = 880;
-    
-    const data: ChartDataPoint[] = [];
-    const now = new Date();
+        let price = 150.00;
+        if (ticker.includes("BTC")) price = 65000;
+        if (ticker.includes("RELIANCE")) price = 2900;
+        if (ticker.includes("NVDA")) price = 880;
 
-    for (let i = 100; i > 0; i--) {
-        const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000); 
-        const volatility = price * 0.02; 
-        
-        const change = (Math.random() - 0.5) * volatility;
-        const open = price;
-        const close = price + change;
-        const high = Math.max(open, close) + Math.random() * volatility * 0.5;
-        const low = Math.min(open, close) - Math.random() * volatility * 0.5;
-        const volume = Math.floor(Math.random() * 1000000) + 500000;
+        const data: ChartDataPoint[] = [];
+        const now = new Date();
 
-        data.push({
-            time: date.toISOString().split('T')[0], 
-            open: parseFloat(open.toFixed(2)),
-            high: parseFloat(high.toFixed(2)),
-            low: parseFloat(low.toFixed(2)),
-            close: parseFloat(close.toFixed(2)),
-            volume: volume
-        });
+        for (let i = 100; i > 0; i--) {
+            const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+            const volatility = price * 0.02;
 
-        price = close; 
+            const change = (Math.random() - 0.5) * volatility;
+            const open = price;
+            const close = price + change;
+            const high = Math.max(open, close) + Math.random() * volatility * 0.5;
+            const low = Math.min(open, close) - Math.random() * volatility * 0.5;
+            const volume = Math.floor(Math.random() * 1000000) + 500000;
+
+            data.push({
+                time: date.toISOString().split('T')[0],
+                open: parseFloat(open.toFixed(2)),
+                high: parseFloat(high.toFixed(2)),
+                low: parseFloat(low.toFixed(2)),
+                close: parseFloat(close.toFixed(2)),
+                volume: volume
+            });
+
+            price = close;
+        }
+
+        return data;
     }
-
-    return data;
 };
 
 // --- 9. PORTFOLIO API ---
 
 export const fetchPortfolioData = async () => {
     await new Promise(resolve => setTimeout(resolve, 500));
-    
+
     return {
         summary: {
             total_value: "$101,760.45",
@@ -320,29 +357,29 @@ export const fetchPortfolioData = async () => {
             change: "+49.5%"
         },
         holdings: [
-            { 
-                id: "1", symbol: "NVDA", name: "NVIDIA Corp", type: "STOCK", 
-                price: 186.23, balance: 45, value: 8380.35, 
-                pl_amount: "+$2,778.00", pl_percent: "+49.6%", 
-                allocation: 42, color: "#d2fc52" 
+            {
+                id: "1", symbol: "NVDA", name: "NVIDIA Corp", type: "STOCK",
+                price: 186.23, balance: 45, value: 8380.35,
+                pl_amount: "+$2,778.00", pl_percent: "+49.6%",
+                allocation: 42, color: "#d2fc52"
             },
-            { 
-                id: "2", symbol: "BTC-USD", name: "Bitcoin", type: "CRYPTO", 
-                price: 85400.00, balance: 0.45, value: 38430.00, 
-                pl_amount: "+$10,530.00", pl_percent: "+37.7%", 
-                allocation: 28, color: "#3fb950" 
+            {
+                id: "2", symbol: "BTC-USD", name: "Bitcoin", type: "CRYPTO",
+                price: 85400.00, balance: 0.45, value: 38430.00,
+                pl_amount: "+$10,530.00", pl_percent: "+37.7%",
+                allocation: 28, color: "#3fb950"
             },
-            { 
-                id: "3", symbol: "TSLA", name: "Tesla Inc", type: "STOCK", 
-                price: 182.50, balance: 120, value: 21900.00, 
-                pl_amount: "-$7,500.00", pl_percent: "-25.5%", 
-                allocation: 15, color: "#ef4444" 
+            {
+                id: "3", symbol: "TSLA", name: "Tesla Inc", type: "STOCK",
+                price: 182.50, balance: 120, value: 21900.00,
+                pl_amount: "-$7,500.00", pl_percent: "-25.5%",
+                allocation: 15, color: "#ef4444"
             },
-            { 
-                id: "4", symbol: "AAPL", name: "Apple Inc", type: "STOCK", 
-                price: 225.00, balance: 65, value: 14625.00, 
-                pl_amount: "+$3,200.00", pl_percent: "+36.6%", 
-                allocation: 15, color: "#3fb950" 
+            {
+                id: "4", symbol: "AAPL", name: "Apple Inc", type: "STOCK",
+                price: 225.00, balance: 65, value: 14625.00,
+                pl_amount: "+$3,200.00", pl_percent: "+36.6%",
+                allocation: 15, color: "#3fb950"
             }
         ]
     };
@@ -351,7 +388,7 @@ export const fetchPortfolioData = async () => {
 // --- 10. ANALYSIS API (with Sectors) ---
 
 export const fetchAnalysisFeed = async () => {
-    await new Promise(resolve => setTimeout(resolve, 600)); 
+    await new Promise(resolve => setTimeout(resolve, 600));
 
     return [
         {
@@ -408,7 +445,7 @@ export const fetchAnalysisFeed = async () => {
             id: "6",
             ticker: "TSLA",
             name: "Tesla Inc",
-            sector: "Technology", 
+            sector: "Technology",
             price: "$175.40",
             change: "-2.4%",
             signal: "SELL",

@@ -8,7 +8,7 @@ from app.routers.portfolio import get_portfolio
 
 router = APIRouter()
 
-@router.get("/reports")
+@router.get("/")
 def list_reports():
     """Lists all generated PDF reports."""
     files = []
@@ -24,14 +24,14 @@ def list_reports():
                 })
     return sorted(files, key=lambda x: x['created'], reverse=True)
 
-@router.post("/reports/generate")
+@router.post("/generate")
 def create_report():
     """Generates a new PDF based on current portfolio data."""
     data = get_portfolio() # Fetch live data
     filename = generate_portfolio_pdf(data)
     return {"status": "success", "filename": filename}
 
-@router.get("/reports/download/{filename}")
+@router.get("/download/{filename}")
 def download_report(filename: str):
     """Downloads a specific file."""
     file_path = os.path.join(REPORT_DIR, filename)
