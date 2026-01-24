@@ -2,6 +2,9 @@ import Groq from "groq-sdk";
 
 // --- 1. CONFIGURATION & HELPERS ---
 
+// ✅ UPDATE: Pointing to Live Render Backend
+const BASE_URL = "https://alphafeed-backend.onrender.com/api";
+
 const getGroqClient = () => {
     const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
     if (!apiKey) return null;
@@ -56,8 +59,8 @@ export const askIntelligence = async (query: string) => {
         "delta": "Change (e.g. +2%)"
       },
       "sources": [
-         { "title": "Official Investor Relations", "domain": "ir.company.com", "url": "https://www.google.com/search?q=investor+relations" },
-         { "title": "Market Data Analysis", "domain": "reuters.com", "url": "https://www.reuters.com/markets" }
+          { "title": "Official Investor Relations", "domain": "ir.company.com", "url": "https://www.google.com/search?q=investor+relations" },
+          { "title": "Market Data Analysis", "domain": "reuters.com", "url": "https://www.reuters.com/markets" }
       ]
     }
     `;
@@ -234,7 +237,8 @@ export const fetchEarnings = async () => {
 
 export const fetchSentiment = async (ticker: string) => {
     try {
-        const response = await fetch(`http://localhost:8000/api/market/sentiment/${ticker}`);
+        // ✅ Uses the Live Render Backend
+        const response = await fetch(`${BASE_URL}/market/sentiment/${ticker}`);
         if (!response.ok) throw new Error("Backend offline");
         return await response.json();
     } catch (error) {
@@ -246,21 +250,16 @@ export const fetchSentiment = async (ticker: string) => {
         if (ticker.includes("RELIANCE")) basePrice = 2980;
         if (ticker.includes("AAPL")) basePrice = 225;
 
-        // Calculate Projected Range
         const volatility = basePrice * 0.03;
         const low = (basePrice - volatility).toLocaleString(undefined, { maximumFractionDigits: 2 });
         const high = (basePrice + volatility).toLocaleString(undefined, { maximumFractionDigits: 2 });
-
-        // Add Currency Symbol
         const currency = ticker.includes("NS") ? "₹" : "$";
 
         return {
             ticker: ticker,
-            sentiment_score: Math.floor(Math.random() * 25) + 65, // 65-90%
+            sentiment_score: Math.floor(Math.random() * 25) + 65,
             sentiment_label: "BULLISH",
-            // Comprehensive Analysis Summary
             summary: `Technical indicators suggest a breakout pattern forming on the 4H timeframe, supported by increasing buy volume. Moving averages have crossed bullishly, indicating sustained momentum. Analysts predict a test of the upper resistance levels if current support holds through the session.`,
-            // Returns formatted string with currency (e.g., "$145.50")
             projected_low: `${currency}${low}`,
             projected_high: `${currency}${high}`
         };
@@ -269,7 +268,8 @@ export const fetchSentiment = async (ticker: string) => {
 
 export const fetchMacroView = async () => {
     try {
-        const response = await fetch("http://localhost:8000/api/market/macro");
+        // ✅ Uses the Live Render Backend
+        const response = await fetch(`${BASE_URL}/market/macro`);
         if (!response.ok) throw new Error("Backend offline");
         return await response.json();
     } catch (error) {
@@ -298,12 +298,12 @@ export interface ChartDataPoint {
 
 export const fetchChartData = async (ticker: string, timeframe: string = "1D") => {
     try {
-        const response = await fetch(`http://localhost:8000/api/market/candles/${ticker}?timeframe=${timeframe}`);
+        // ✅ Uses the Live Render Backend
+        const response = await fetch(`${BASE_URL}/market/candles/${ticker}?timeframe=${timeframe}`);
         if (!response.ok) throw new Error("Backend offline");
         return await response.json();
     } catch (error) {
         console.warn("Chart feed offline, using backup data:", error);
-        // Backup Logic
         await new Promise(resolve => setTimeout(resolve, 600));
 
         let price = 150.00;
