@@ -63,12 +63,13 @@ export const askIntelligence = async (query: string) => {
     `;
 
     try {
+        const cleanQuery = checkContextWindow(query);
         const completion = await groq.chat.completions.create({
             messages: [
                 { role: "system", content: systemPrompt },
-                { role: "user", content: query }
+                { role: "user", content: cleanQuery }
             ],
-            model: "llama-3.3-70b-versatile",
+            model: AI_MODEL,
             temperature: 0.2,
             response_format: { type: "json_object" }
         });
@@ -137,12 +138,13 @@ export const verifySourceContent = async (text: string) => {
     `;
 
     try {
+        const cleanText = checkContextWindow(text);
         const completion = await groq.chat.completions.create({
             messages: [
                 { role: "system", content: systemPrompt },
-                { role: "user", content: `Verify this: "${text}"` }
+                { role: "user", content: `Verify this: "${cleanText}"` }
             ],
-            model: "llama-3.3-70b-versatile",
+            model: AI_MODEL,
             response_format: { type: "json_object" }
         });
 

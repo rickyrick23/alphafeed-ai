@@ -13,6 +13,10 @@ def verify(req: VerifyRequest):
     trust_score = random.randint(85, 99)
     bias_rating = "Low" if trust_score > 90 else "Medium"
     
+    # Error Analysis Logging (Research Feedback)
+    if trust_score < 70:
+        print(f"[ANALYSIS LOG] Potential False Positive/Negative check required. Score: {trust_score}, Content: {req.content[:50]}...")
+
     return {
         "trust_score": trust_score,
         "status": "VERIFIED" if trust_score > 70 else "QUESTIONABLE",
